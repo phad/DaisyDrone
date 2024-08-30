@@ -10,9 +10,9 @@ using namespace daisy::seed;
 
 DaisySeed hw;
 
-constexpr int NUM_TONES(6);
-constexpr int NUM_POTS(NUM_TONES+2);	// tones pots plus 2 additional parameter pots
-constexpr int pot_pins[NUM_POTS] = { 17, 18, 19, 20, 21, 22, 16, 15 };
+constexpr int NUM_TONES(5);
+constexpr int NUM_POTS(NUM_TONES + 1);
+constexpr int pot_pins[NUM_POTS] = { 20, 19, 18, 17, 16, 15 };
 
 struct ToneSet
 {
@@ -283,30 +283,29 @@ int main(void)
 		osc.initialise(sample_rate);
 	}
 
-	//const float base_frequency = 65.41f; // C2
 	const float base_frequency(440);
 	set_tones(base_frequency);
 
 	// NOTE: AGND and DGND must be connected for audio and ADC to work
 	hw.StartAudio(audio_callback);
 
-	SevenSegmentDisplay seven_seg( { D24, D25, D27, D28, D29, D23, D30, D26 } );
+//	SevenSegmentDisplay seven_seg( { D24, D25, D27, D28, D29, D23, D30, D26 } );
 	int current_tone_set = 0;
 	const ToneSet& tone_set = tones_sets[current_tone_set];
-	seven_seg.set_character( tone_set.m_note );
-	seven_seg.set_dot( tone_set.m_is_sharp );
+//	seven_seg.set_character( tone_set.m_note );
+//	seven_seg.set_dot( tone_set.m_is_sharp );
 	set_tones(tone_set.m_base_frequency);
 
 	Switch sum_avg_switch;
 	Switch sum_sin_switch;
 	Switch sum_tri_switch;
 
-	sum_avg_switch.Init(D2);
-	sum_sin_switch.Init(D1);
-	sum_tri_switch.Init(D0);
+	sum_avg_switch.Init(D22);
+	sum_sin_switch.Init(D23);
+	sum_tri_switch.Init(D25);  // TODO: clashes with encoder
 
 	Encoder encoder;
-	encoder.Init(D6,D5,D3);
+	encoder.Init(D24,D26,D25);
 
 	while(1)
 	{	
@@ -316,8 +315,7 @@ int main(void)
 			oscillators[t].set_amplitude( pot_val );
 		}
 
-		//const float pot1_val = hw.adc.GetFloat(NUM_TONES);
-		gain = 1.0f -hw.adc.GetFloat(NUM_TONES+1);
+		gain = hw.adc.GetFloat(NUM_TONES);
 
 		sum_avg_switch.Debounce();
 		sum_sin_switch.Debounce();
@@ -354,8 +352,8 @@ int main(void)
 		if( inc != 0)
 		{
 			const ToneSet& tone_set = tones_sets[current_tone_set];
-			seven_seg.set_character( tone_set.m_note );
-			seven_seg.set_dot( tone_set.m_is_sharp );
+			// seven_seg.set_character( tone_set.m_note );
+			// seven_seg.set_dot( tone_set.m_is_sharp );
 
 			set_tones(tone_set.m_base_frequency);
 		}

@@ -5,8 +5,8 @@ TARGET = DaisyDrone
 CPP_SOURCES = DaisyDrone.cpp
 
 # Library Locations
-LIBDAISY_DIR = ../../Documents/Daisy/DaisyExamples/libdaisy/
-DAISYSP_DIR = ../../Documents/Daisy/DaisyExamples/daisysp/
+LIBDAISY_DIR = ../../electro-smith/DaisyExamples/libDaisy/
+DAISYSP_DIR = ../../electro-smith/DaisyExamples/DaisySP/
 
 # Core location, and generic Makefile.
 SYSTEM_FILES_DIR = $(LIBDAISY_DIR)/core

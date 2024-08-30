@@ -60,18 +60,18 @@ char strbuff0[32];
 char strbuff1[32];
 
 void update_display(const ToneSet& tone_set, WAVE_SUM_TYPE sum_type) {
-  sprintf(strbuff0, "Key:      %c%c",
+  sprintf(strbuff0, "Key:   %c%c",
 		tone_set.m_note,
 		tone_set.m_is_sharp ? '#': ' ');
-  sprintf(strbuff1, "Wavefold: %s",
+  sprintf(strbuff1, "Wfold: %s",
       (sum_type == WAVE_SUM_TYPE::AVERAGE
 	        ? "none"
             : sum_type == WAVE_SUM_TYPE::SINE_WAVE_FOLD ? "sine" : "triangle"));
   display.Fill(true);
   display.SetCursor(0, 16);
-  display.WriteString(strbuff0, Font_7x10, false);
+  display.WriteString(strbuff0, Font_11x18, false);
   display.SetCursor(0, 32);
-  display.WriteString(strbuff1, Font_7x10, false);
+  display.WriteString(strbuff1, Font_11x18, false);
   display.Update();
 }
 

@@ -2,11 +2,14 @@
 
 #include "daisy_seed.h"
 #include "daisysp.h"
-
+#include "dev/oled_ssd130x.h"
 
 using namespace daisy;
 using namespace daisysp;
 using namespace daisy::seed;
+
+using MyOledDisplay = OledDisplay<SSD130x4WireSpi128x64Driver>;
+MyOledDisplay display;
 
 DaisySeed hw;
 
@@ -45,99 +48,28 @@ enum class WAVE_SUM_TYPE
 WAVE_SUM_TYPE sum_type = WAVE_SUM_TYPE::AVERAGE;
 
 
-class SevenSegmentDisplay
-{
-	static constexpr int NUM_LEDS = 8;
+void setup_display() {
+  MyOledDisplay::Config disp_cfg;
+  disp_cfg.driver_config.transport_config.pin_config.dc    = hw.GetPin(9);
+  disp_cfg.driver_config.transport_config.pin_config.reset = hw.GetPin(30);
+  /** And Initialize */
+  display.Init(disp_cfg);
+}
 
-	std::array<GPIO, NUM_LEDS>		m_gpio_pins;
+char strbuff0[32];
+char strbuff1[32];
 
-public:
-
-	// Pins a,b,c,d,e,f,g,DP
-	SevenSegmentDisplay( const std::array<Pin, NUM_LEDS>& pins )
-	{
-		for( int p = 0; p < NUM_LEDS; ++p )
-		{
-			m_gpio_pins[p].Init(pins[p], GPIO::Mode::OUTPUT, GPIO::Pull::NOPULL);
-		}
-
-		// turn the leds off
-		for( GPIO& gpio : m_gpio_pins )
-		{
-			gpio.Write(false);
-		}	
-	}
-
-	void set_byte_mask( char mask )
-	{
-		int bit = 1;
-		for( int p = 0; p < (NUM_LEDS-1); ++p ) // NUM_LEDS-1 because last led is the dot
-		{
-			GPIO& gpio = m_gpio_pins[p];
-			if( mask & bit )
-			{
-				gpio.Write(true);
-			}
-			else
-			{
-				gpio.Write(false);
-			}
-
-			bit <<= 1;
-		}
-	}
-
-	void set_character( char character )
-	{
-		switch(character)
-		{
-			case 'A':
-			{
-				set_byte_mask(0b01110111);
-				break;
-			}
-			case 'B':
-			{
-				set_byte_mask(0b01111111);
-				break;
-			}
-			case 'C':
-			{
-				set_byte_mask(0b00111001);
-				break;
-			}
-			case 'D':
-			{
-				set_byte_mask(0b00111111);
-				break;
-			}
-			case 'E':
-			{
-				set_byte_mask(0b01111001);
-				break;
-			}
-			case 'F':
-			{
-				set_byte_mask(0b01110001);
-				break;
-			}
-			case 'G':
-			{
-				set_byte_mask(0b01111101);
-				break;
-			}				
-			default:
-			{
-				set_byte_mask(0);
-			}
-		}
-	}
-
-	void set_dot( bool set )
-	{
-		m_gpio_pins.back().Write(set);
-	}
-};
+void update_display(const ToneSet& tone_set, WAVE_SUM_TYPE sum_type) {
+  sprintf(strbuff0, "Key %c%c", tone_set.m_note, (tone_set.m_is_sharp ? '#': ' '));
+  sprintf(strbuff1, "Wavefold: %c", (sum_type == WAVE_SUM_TYPE::AVERAGE ? 'a'
+  : (sum_type == WAVE_SUM_TYPE::SINE_WAVE_FOLD ? 's' : 't')));
+  display.Fill(true);
+  display.SetCursor(0, 16);
+  display.WriteString(strbuff0, Font_7x10, false);
+  display.SetCursor(0, 32);
+  display.WriteString(strbuff1, Font_7x10, false);
+  display.Update();
+}
 
 class DroneOscillator
 {
@@ -274,6 +206,7 @@ int main(void)
 	hw.Configure();
 	hw.Init();
 
+    setup_display();
 	init_adc();
 
     //Set up oscillators
@@ -349,12 +282,11 @@ int main(void)
 			current_tone_set = NUM_TONE_SETS - current_tone_set;
 		}
 
+		const ToneSet& tone_set = tones_sets[current_tone_set];
+		update_display(tone_set, sum_type);
+
 		if( inc != 0)
 		{
-			const ToneSet& tone_set = tones_sets[current_tone_set];
-			// seven_seg.set_character( tone_set.m_note );
-			// seven_seg.set_dot( tone_set.m_is_sharp );
-
 			set_tones(tone_set.m_base_frequency);
 		}
 

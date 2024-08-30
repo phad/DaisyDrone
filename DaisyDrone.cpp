@@ -60,9 +60,13 @@ char strbuff0[32];
 char strbuff1[32];
 
 void update_display(const ToneSet& tone_set, WAVE_SUM_TYPE sum_type) {
-  sprintf(strbuff0, "Key %c%c", tone_set.m_note, (tone_set.m_is_sharp ? '#': ' '));
-  sprintf(strbuff1, "Wavefold: %c", (sum_type == WAVE_SUM_TYPE::AVERAGE ? 'a'
-  : (sum_type == WAVE_SUM_TYPE::SINE_WAVE_FOLD ? 's' : 't')));
+  sprintf(strbuff0, "Key:      %c%c",
+		tone_set.m_note,
+		tone_set.m_is_sharp ? '#': ' ');
+  sprintf(strbuff1, "Wavefold: %s",
+      (sum_type == WAVE_SUM_TYPE::AVERAGE
+	        ? "none"
+            : sum_type == WAVE_SUM_TYPE::SINE_WAVE_FOLD ? "sine" : "triangle"));
   display.Fill(true);
   display.SetCursor(0, 16);
   display.WriteString(strbuff0, Font_7x10, false);
@@ -222,20 +226,17 @@ int main(void)
 	// NOTE: AGND and DGND must be connected for audio and ADC to work
 	hw.StartAudio(audio_callback);
 
-//	SevenSegmentDisplay seven_seg( { D24, D25, D27, D28, D29, D23, D30, D26 } );
 	int current_tone_set = 0;
 	const ToneSet& tone_set = tones_sets[current_tone_set];
-//	seven_seg.set_character( tone_set.m_note );
-//	seven_seg.set_dot( tone_set.m_is_sharp );
 	set_tones(tone_set.m_base_frequency);
 
 	Switch sum_avg_switch;
 	Switch sum_sin_switch;
 	Switch sum_tri_switch;
 
-	sum_avg_switch.Init(D22);
-	sum_sin_switch.Init(D23);
-	sum_tri_switch.Init(D25);  // TODO: clashes with encoder
+	sum_avg_switch.Init(D25);
+	sum_sin_switch.Init(D22);
+	sum_tri_switch.Init(D23);
 
 	Encoder encoder;
 	encoder.Init(D24,D26,D25);

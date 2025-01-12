@@ -1,21 +1,25 @@
 #include <array>
 
-#include "daisy_seed.h"
+#include "daisy_versio.h"
 #include "daisysp.h"
-#include "dev/oled_ssd130x.h"
 
 using namespace daisy;
 using namespace daisysp;
 using namespace daisy::seed;
 
-using MyOledDisplay = OledDisplay<SSD130x4WireSpi128x64Driver>;
-MyOledDisplay display;
-
-DaisySeed hw;
+DaisyVersio hw;
 
 constexpr int NUM_TONES(5);
-constexpr int NUM_POTS(NUM_TONES + 1);
-constexpr int pot_pins[NUM_POTS] = { 20, 19, 18, 17, 16, 15 };
+constexpr int NUM_POTS(NUM_TONES + 2);
+constexpr int KNOBS[NUM_POTS] = {
+	DaisyVersio::KNOB_0,
+	DaisyVersio::KNOB_1,
+	DaisyVersio::KNOB_2,
+	DaisyVersio::KNOB_3,
+	DaisyVersio::KNOB_4,
+	DaisyVersio::KNOB_5,
+	DaisyVersio::KNOB_6,
+}; 
 
 struct ToneSet
 {
@@ -47,35 +51,6 @@ enum class WAVE_SUM_TYPE
 };
 
 WAVE_SUM_TYPE sum_type = WAVE_SUM_TYPE::AVERAGE;
-
-
-void setup_display() {
-  MyOledDisplay::Config disp_cfg;
-  disp_cfg.driver_config.transport_config.pin_config.dc    = hw.GetPin(9);
-  disp_cfg.driver_config.transport_config.pin_config.reset = hw.GetPin(30);
-  /** And Initialize */
-  display.Init(disp_cfg);
-}
-
-char strbuff0[32];
-char strbuff1[32];
-
-void update_display(const ToneSet& tone_set, WAVE_SUM_TYPE sum_type, bool is_minor) {
-  sprintf(strbuff0, "Key:   %c%c%c",
-		tone_set.m_note,
-		tone_set.m_is_sharp ? '#': ' ',
-		is_minor ? 'm' : 'M');
-  sprintf(strbuff1, "Wfold: %s",
-      (sum_type == WAVE_SUM_TYPE::AVERAGE
-	        ? "none"
-            : sum_type == WAVE_SUM_TYPE::SINE_WAVE_FOLD ? "sine" : "triangle"));
-  display.Fill(true);
-  display.SetCursor(0, 16);
-  display.WriteString(strbuff0, Font_11x18, false);
-  display.SetCursor(0, 32);
-  display.WriteString(strbuff1, Font_11x18, false);
-  display.Update();
-}
 
 class DroneOscillator
 {
@@ -195,17 +170,6 @@ void audio_callback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, 
 	}
 }
 
-void init_adc()
-{
-	AdcChannelConfig adc_config[NUM_POTS];
-	for( int t = 0; t < NUM_POTS; ++t )
-	{
-		adc_config[t].InitSingle(hw.GetPin(pot_pins[t]));
-	}
-	hw.adc.Init(adc_config, NUM_POTS);
-    hw.adc.Start();
-}
-
 void set_tones(float base_frequency, float cents, bool minor)
 {
 	constexpr int NUM_INTERVALS(4);
@@ -222,103 +186,94 @@ void set_tones(float base_frequency, float cents, bool minor)
 	}
 }
 
-int main(void)
-{
-	hw.Configure();
-	hw.Init();
+int main(void) {
+    // Initialize Versio hardware.
+    hw.Init();
 
-    setup_display();
-	init_adc();
-
-    //Set up oscillators
+    // Set up oscillators.
 	const float sample_rate = hw.AudioSampleRate();
-	for( DroneOscillator& osc : oscillators )
-	{
+	for (DroneOscillator& osc : oscillators) {
 		osc.initialise(sample_rate);
 	}
 
-	const float base_frequency(440);
-	set_tones(base_frequency, DEFAULT_CENTS, /*minor=*/true);
-
-	// NOTE: AGND and DGND must be connected for audio and ADC to work
-	hw.StartAudio(audio_callback);
-
+	// Configure drone initial state.
 	int current_tone_set = 0;
 	const ToneSet& tone_set = tones_sets[current_tone_set];
 	float current_cents = DEFAULT_CENTS;
 	bool is_minor = true;
 	set_tones(tone_set.m_base_frequency, current_cents, is_minor);
 
-	Switch sum_avg_switch;
-	Switch sum_sin_switch;
-	Switch sum_tri_switch;
+	// Start audio processing and ADC.
+    hw.StartAudio(audio_callback);
+    hw.StartAdc();
 
-	sum_avg_switch.Init(D25);
-	sum_sin_switch.Init(D22);
-	sum_tri_switch.Init(D23);
+	bool prev_switch_pressed = false;
 
-	Encoder encoder;
-	encoder.Init(D24,D26,D25);
+    while (true) {
+        hw.ProcessAnalogControls(); // Normalize CV inputs
+        hw.UpdateExample(); // Control the LED colors using the knobs and gate inputs
+        hw.UpdateLeds();
 
-	while(1)
-	{	
-		for( int t = 0; t < NUM_TONES; ++t )
-		{
-			const float pot_val = hw.adc.GetFloat(t);
-			oscillators[t].set_amplitude( pot_val );
+		// Read knob value to set oscillators' amplitudes.
+		for (int t = 0; t < NUM_TONES; ++t) {
+			const float knob_val = hw.GetKnobValue(KNOBS[t]);
+			oscillators[t].set_amplitude(knob_val);
 		}
 
-		gain = 0.8f;
+		// Read detune from knob 5.
 		float prev_cents = current_cents;
-		current_cents = DEFAULT_CENTS * hw.adc.GetFloat(NUM_TONES);
-		bool cents_changed = abs(current_cents - prev_cents) > 0.01f;
+		current_cents = DEFAULT_CENTS * hw.GetKnobValue(KNOBS[NUM_POTS - 2]);
+		bool cents_changed = abs(current_cents - prev_cents) > 0.005f;
 
-		sum_avg_switch.Debounce();
-		sum_sin_switch.Debounce();
-		sum_tri_switch.Debounce();
-		if( sum_avg_switch.Pressed() )
-		{
-			sum_type = WAVE_SUM_TYPE::AVERAGE;
-		}
-		else if( sum_sin_switch.Pressed() )
-		{
-			sum_type = WAVE_SUM_TYPE::SINE_WAVE_FOLD;
-		}
-		else if( sum_tri_switch.Pressed() )
-		{
-			sum_type = WAVE_SUM_TYPE::TRIANGLE_WAVE_FOLD;
-		}
+		// Read gain from knob 6.
+		gain = hw.GetKnobValue(KNOBS[NUM_POTS - 1]);
 
-		// use encoder to update tone set
-		encoder.Debounce();
-		const int inc = encoder.Increment();
-		if( inc != 0 )
-		{
-			is_minor = !is_minor;
+		// Read sum type from switch 1.
+		switch (hw.sw[DaisyVersio::SW_0].Read()) {
+			case Switch3::POS_LEFT:	{
+				sum_type = WAVE_SUM_TYPE::AVERAGE;
+				break;
+			}
+			case Switch3::POS_CENTER: {
+				sum_type = WAVE_SUM_TYPE::SINE_WAVE_FOLD;
+				break;
+			}
+			case Switch3::POS_RIGHT: {
+				sum_type = WAVE_SUM_TYPE::TRIANGLE_WAVE_FOLD;
+				break;
+			}
 		}
 
-		current_tone_set += 7*inc;
+		// Check direction of root change, if button is pressed.  
+		const int dir(hw.sw[DaisyVersio::SW_1].Read());
+		const int inc(dir == Switch3::POS_LEFT
+						? -1
+						: (dir == Switch3::POS_RIGHT ? 1 : 0));
+		if (hw.SwitchPressed() && !prev_switch_pressed) {
+			prev_switch_pressed = true;
 
-		if( current_tone_set > 0 )
-		{
-			current_tone_set = current_tone_set % NUM_TONE_SETS;
+			// If dir switch not centred, move up (down) a perfect 5th, 7 semitones.
+			current_tone_set += 7*inc;
+			if (current_tone_set > 0) {
+				current_tone_set = current_tone_set % NUM_TONE_SETS;
+			} else if (current_tone_set < 0) {
+				current_tone_set = abs(current_tone_set) % NUM_TONE_SETS;
+				current_tone_set = NUM_TONE_SETS - current_tone_set;
+			}
+			// Flip minor/major 3rds if direction switch is centred.
+			if (dir == Switch3::POS_CENTER) {
+				is_minor = !is_minor;
+			}
+		} else if (!hw.SwitchPressed()) {
+			prev_switch_pressed = false;
 		}
-		else if( current_tone_set < 0 )
-		{
-			current_tone_set = abs(current_tone_set) % NUM_TONE_SETS;
-			current_tone_set = NUM_TONE_SETS - current_tone_set;
-		}
 
-		const ToneSet& tone_set = tones_sets[current_tone_set];
-		update_display(tone_set, sum_type, is_minor);
-
-		if( inc != 0 || cents_changed)
-		{
+		if (prev_switch_pressed || cents_changed) {
+			const ToneSet& tone_set = tones_sets[current_tone_set];
 			set_tones(tone_set.m_base_frequency, current_cents, is_minor);
 		}
 
-        //wait 1 ms
+        // Wait 1 ms.
         System::Delay(1);		
-	}
+    }
 }
-

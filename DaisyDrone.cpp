@@ -207,7 +207,7 @@ int main(void) {
     hw.StartAudio(audio_callback);
     hw.StartAdc();
 
-	bool prev_switch_pressed = false;
+	bool prev_switch_or_gate = false;
 
     while (true) {
         hw.ProcessAnalogControls(); // Normalize CV inputs
@@ -249,8 +249,9 @@ int main(void) {
 		const int inc(dir == Switch3::POS_LEFT
 						? -1
 						: (dir == Switch3::POS_RIGHT ? 1 : 0));
-		if (hw.SwitchPressed() && !prev_switch_pressed) {
-			prev_switch_pressed = true;
+		const bool switch_or_gate(hw.SwitchPressed() || hw.Gate());
+		if (switch_or_gate && !prev_switch_or_gate) {
+			prev_switch_or_gate = true;
 
 			// If dir switch not centred, move up (down) a perfect 5th, 7 semitones.
 			current_tone_set += 7*inc;
@@ -264,11 +265,11 @@ int main(void) {
 			if (dir == Switch3::POS_CENTER) {
 				is_minor = !is_minor;
 			}
-		} else if (!hw.SwitchPressed()) {
-			prev_switch_pressed = false;
+		} else if (!switch_or_gate) {
+			prev_switch_or_gate = false;
 		}
 
-		if (prev_switch_pressed || cents_changed) {
+		if (prev_switch_or_gate || cents_changed) {
 			const ToneSet& tone_set = tones_sets[current_tone_set];
 			set_tones(tone_set.m_base_frequency, current_cents, is_minor);
 		}
